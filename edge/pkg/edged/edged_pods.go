@@ -724,7 +724,6 @@ func (e *edged) makeEnvironmentVariables(pod *v1.Pod, container *v1.Container, p
 				secret, ok := secrets[name]
 				if !ok {
 					if e.kubeClient == nil {
-						klog.Infof("makeEnv kubeclient is nil")
 						return result, fmt.Errorf("Couldn't get secret %v/%v, no kubeClient defined", pod.Namespace, name)
 					}
 					secret, err = e.secretManager.GetSecret(pod.Namespace, name)
@@ -734,7 +733,7 @@ func (e *edged) makeEnvironmentVariables(pod *v1.Pod, container *v1.Container, p
 							// ignore error when marked optional
 							continue
 						}
-						klog.Infof("makeEnv kubeclient err %v", err)
+
 						return result, err
 					}
 					secrets[name] = secret
