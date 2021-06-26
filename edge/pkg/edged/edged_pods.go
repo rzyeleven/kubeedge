@@ -671,6 +671,7 @@ func (e *edged) makeEnvironmentVariables(pod *v1.Pod, container *v1.Container, p
 	// 3.  Add remaining service environment vars
 	var (
 		configMaps  = make(map[string]*v1.ConfigMap)
+		secrets    = make(map[string]*v1.Secret)
 		tmpEnv      = make(map[string]string)
 		mappingFunc = expansion.MappingFuncFor(tmpEnv)
 	)
@@ -715,6 +716,38 @@ func (e *edged) makeEnvironmentVariables(pod *v1.Pod, container *v1.Container, p
 					}
 					return result, fmt.Errorf("Couldn't find key %v in ConfigMap %v/%v", key, pod.Namespace, name)
 				}
+			case envVar.ValueFrom.SecretKeyRef != nil:
+				s := envVar.ValueFrom.SecretKeyRef
+				name := s.Name
+				key := s.Key
+				optional := s.Optional != nil && *s.Optional
+				secret, ok := secrets[name]
+				if !ok {
+					if e.kubeClient == nil {
+						klog.Infof("makeEnv kubeclient is nil")
+						return result, fmt.Errorf("Couldn't get secret %v/%v, no kubeClient defined", pod.Namespace, name)
+					}
+					secret, err = e.secretManager.GetSecret(pod.Namespace, name)
+					if err != nil {
+						if apierrors.IsNotFound(err) && optional {
+							klog.Infof("makeEnv kubeclient err %v", err)
+							// ignore error when marked optional
+							continue
+						}
+						klog.Infof("makeEnv kubeclient err %v", err)
+						return result, err
+					}
+					secrets[name] = secret
+				}
+				runtimeValBytes, ok := secret.Data[key]
+				if !ok {
+					if optional {
+						continue
+					}
+					return result, fmt.Errorf("Couldn't find key %v in Secret %v/%v", key, pod.Namespace, name)
+				}
+
+				runtimeVal = string(runtimeValBytes)
 			}
 		}
 
